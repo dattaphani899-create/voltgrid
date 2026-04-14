@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VoltGrid — EV Charge Point Operator Platform</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --green: #00E87A;
+    --green-dim: #00b85f;
+    --dark: #080E08;
+    --dark2: #0f1a0f;
+    --dark3: #162016;
+    --card: #111a11;
+    --border: rgba(0,232,122,0.15);
+    --text: #e8f0e8;
+    --muted: #7a9e7a;
+    --white: #ffffff;
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--dark);
+    color: var(--text);
+    overflow-x: hidden;
+    line-height: 1.6;
+  }
+
+  /* ── NAV ── */
+  nav {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 20px 48px;
+    background: rgba(8,14,8,0.85);
+    backdrop-filter: blur(12px);
+    border-bottom: 0.5px solid var(--border);
+  }
+  .logo { font-family: 'Syne', sans-serif; font-size: 22px; font-weight: 800; color: var(--white); letter-spacing: -0.5px; }
+  .logo span { color: var(--green); }
+  .nav-links { display: flex; gap: 36px; list-style: none; }
+  .nav-links a { color: var(--muted); text-decoration: none; font-size: 14px; transition: color 0.2s; }
+  .nav-links a:hover { color: var(--white); }
+  .nav-cta { background: var(--green); color: var(--dark); font-family: 'Syne', sans-serif; font-weight: 700; font-size: 13px; padding: 10px 22px; border-radius: 6px; text-decoration: none; transition: opacity 0.2s; }
+  .nav-cta:hover { opacity: 0.85; }
+
+  /* ── HERO ── */
+  .hero {
+    min-height: 100vh;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center;
+    padding: 120px 24px 80px;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero-bg {
+    position: absolute; inset: 0;
+    background: radial-gradient(ellipse 70% 60% at 50% 40%, rgba(0,232,122,0.08) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .hero-grid {
+    position: absolute; inset: 0;
+    background-image: linear-gradient(rgba(0,232,122,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(0,232,122,0.04) 1px, transparent 1px);
+    background-size: 48px 48px;
+    pointer-events: none;
+    mask-image: radial-gradient(ellipse 80% 80% at 50% 50%, black 20%, transparent 80%);
+  }
+  .badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: rgba(0,232,122,0.1); border: 0.5px solid var(--border);
+    color: var(--green); font-size: 12px; font-weight: 500; padding: 6px 14px; border-radius: 100px;
+    margin-bottom: 32px; letter-spacing: 0.5px;
+    animation: fadeUp 0.6s ease both;
+  }
+  .badge-dot { width: 6px; height: 6px; background: var(--green); border-radius: 50%; animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(1.4)} }
+
+  h1 {
+    font-family: 'Syne', sans-serif;
+    font-size: clamp(44px, 8vw, 88px);
+    font-weight: 800;
+    line-height: 1.0;
+    color: var(--white);
+    letter-spacing: -2px;
+    max-width: 900px;
+    animation: fadeUp 0.6s 0.1s ease both;
+  }
+  h1 em { color: var(--green); font-style: normal; }
+
+  .hero-sub {
+    margin-top: 24px;
+    font-size: 18px; font-weight: 300; color: var(--muted);
+    max-width: 540px; line-height: 1.7;
+    animation: fadeUp 0.6s 0.2s ease both;
+  }
+
+  .hero-actions {
+    display: flex; gap: 16px; margin-top: 48px; flex-wrap: wrap; justify-content: center;
+    animation: fadeUp 0.6s 0.3s ease both;
+  }
+  .btn-primary {
+    background: var(--green); color: var(--dark);
+    font-family: 'Syne', sans-serif; font-weight: 700; font-size: 15px;
+    padding: 16px 36px; border-radius: 8px; text-decoration: none; border: none; cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.2s;
+    box-shadow: 0 0 40px rgba(0,232,122,0.25);
+  }
+  .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 0 60px rgba(0,232,122,0.4); }
+  .btn-ghost {
+    background: transparent; color: var(--white);
+    font-family: 'Syne', sans-serif; font-weight: 600; font-size: 15px;
+    padding: 16px 36px; border-radius: 8px; text-decoration: none;
+    border: 0.5px solid rgba(255,255,255,0.2); cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+  }
+  .btn-ghost:hover { border-color: var(--green); background: rgba(0,232,122,0.05); }
+
+  /* Live stats bar */
+  .stats-bar {
+    display: flex; gap: 0; margin-top: 80px; border: 0.5px solid var(--border);
+    border-radius: 12px; overflow: hidden; background: var(--card);
+    animation: fadeUp 0.6s 0.4s ease both;
+  }
+  .stat-item {
+    padding: 20px 36px; text-align: center; border-right: 0.5px solid var(--border);
+    flex: 1;
+  }
+  .stat-item:last-child { border-right: none; }
+  .stat-num { font-family: 'Syne', sans-serif; font-size: 28px; font-weight: 800; color: var(--white); }
+  .stat-num span { color: var(--green); }
+  .stat-label { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+  @keyframes fadeUp { from { opacity:0; transform:translateY(24px); } to { opacity:1; transform:translateY(0); } }
+
+  /* ── SECTION COMMONS ── */
+  section { padding: 100px 24px; }
+  .container { max-width: 1100px; margin: 0 auto; }
+  .section-label { font-size: 11px; font-weight: 500; color: var(--green); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 14px; }
+  .section-title { font-family: 'Syne', sans-serif; font-size: clamp(28px, 4vw, 48px); font-weight: 800; color: var(--white); letter-spacing: -1px; line-height: 1.1; }
+  .section-sub { font-size: 16px; color: var(--muted); margin-top: 14px; max-width: 520px; line-height: 1.7; }
+
+  /* ── HOW IT WORKS ── */
+  .how { background: var(--dark2); }
+  .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 2px; margin-top: 56px; background: var(--border); border-radius: 12px; overflow: hidden; }
+  .step-card {
+    background: var(--card); padding: 36px 28px;
+    position: relative; transition: background 0.2s;
+  }
+  .step-card:hover { background: var(--dark3); }
+  .step-num {
+    font-family: 'Syne', sans-serif; font-size: 56px; font-weight: 800;
+    color: rgba(0,232,122,0.12); position: absolute; top: 16px; right: 20px;
+    line-height: 1;
+  }
+  .step-icon { font-size: 28px; margin-bottom: 16px; }
+  .step-title { font-family: 'Syne', sans-serif; font-size: 16px; font-weight: 700; color: var(--white); margin-bottom: 10px; }
+  .step-desc { font-size: 14px; color: var(--muted); line-height: 1.65; }
+
+  /* ── FEATURES ── */
+  .features-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5px; margin-top: 56px; background: var(--border); border-radius: 16px; overflow: hidden; }
+  .feature-card {
+    background: var(--card); padding: 32px;
+    transition: background 0.2s; cursor: default;
+  }
+  .feature-card:hover { background: var(--dark3); }
+  .feature-icon {
+    width: 44px; height: 44px; border-radius: 10px;
+    background: rgba(0,232,122,0.1); border: 0.5px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; margin-bottom: 20px;
+  }
+  .feature-title { font-family: 'Syne', sans-serif; font-size: 17px; font-weight: 700; color: var(--white); margin-bottom: 10px; }
+  .feature-desc { font-size: 14px; color: var(--muted); line-height: 1.65; }
+
+  /* ── OCPP SECTION ── */
+  .ocpp-section { background: var(--dark2); }
+  .ocpp-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 80px; align-items: center; margin-top: 56px; }
+  .ocpp-diagram {
+    background: var(--card); border: 0.5px solid var(--border);
+    border-radius: 16px; padding: 32px; font-family: monospace; font-size: 13px;
+    position: relative; overflow: hidden;
+  }
+  .ocpp-diagram::before {
+    content: 'OCPP 1.6 WebSocket';
+    position: absolute; top: 12px; right: 16px;
+    font-size: 10px; color: var(--green); font-family: 'DM Sans', sans-serif; font-weight: 500;
+    letter-spacing: 1px;
+  }
+  .msg { margin: 10px 0; display: flex; align-items: flex-start; gap: 10px; }
+  .arrow-r { color: var(--green); font-size: 16px; flex-shrink: 0; }
+  .arrow-l { color: var(--muted); font-size: 16px; flex-shrink: 0; }
+  .msg-body { font-size: 12px; line-height: 1.5; }
+  .msg-key { color: var(--muted); }
+  .msg-val { color: #7dd3a8; }
+  .msg-action { color: #f0c040; }
+  .divider-line { border: none; border-top: 0.5px solid var(--border); margin: 14px 0; }
+  .ocpp-points { list-style: none; display: flex; flex-direction: column; gap: 20px; }
+  .ocpp-point { display: flex; gap: 16px; align-items: flex-start; }
+  .ocpp-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); flex-shrink: 0; margin-top: 6px; }
+  .ocpp-point-title { font-family: 'Syne', sans-serif; font-size: 15px; font-weight: 700; color: var(--white); }
+  .ocpp-point-desc { font-size: 14px; color: var(--muted); margin-top: 3px; }
+
+  /* ── PRICING ── */
+  .pricing-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; margin-top: 56px; }
+  .price-card {
+    background: var(--card); border: 0.5px solid var(--border);
+    border-radius: 16px; padding: 36px;
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+  .price-card:hover { transform: translateY(-4px); }
+  .price-card.featured {
+    border-color: var(--green);
+    box-shadow: 0 0 60px rgba(0,232,122,0.1);
+    position: relative;
+  }
+  .featured-badge {
+    position: absolute; top: -12px; left: 50%; transform: translateX(-50%);
+    background: var(--green); color: var(--dark); font-size: 11px; font-weight: 700;
+    font-family: 'Syne', sans-serif; padding: 4px 14px; border-radius: 100px; white-space: nowrap;
+  }
+  .price-tier { font-size: 12px; font-weight: 500; color: var(--muted); letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 12px; }
+  .price-amount { font-family: 'Syne', sans-serif; font-size: 48px; font-weight: 800; color: var(--white); line-height: 1; }
+  .price-amount sup { font-size: 20px; vertical-align: super; color: var(--green); }
+  .price-period { font-size: 14px; color: var(--muted); margin-left: 4px; }
+  .price-desc { font-size: 14px; color: var(--muted); margin: 16px 0 24px; }
+  .price-features { list-style: none; display: flex; flex-direction: column; gap: 10px; margin-bottom: 32px; }
+  .price-features li { font-size: 14px; color: var(--text); display: flex; gap: 10px; }
+  .price-features li::before { content: '✓'; color: var(--green); font-weight: 700; flex-shrink: 0; }
+  .btn-plan {
+    display: block; text-align: center; padding: 14px;
+    border-radius: 8px; font-family: 'Syne', sans-serif; font-weight: 700; font-size: 14px;
+    text-decoration: none; transition: all 0.2s;
+  }
+  .btn-plan-outline { border: 0.5px solid var(--border); color: var(--white); background: transparent; }
+  .btn-plan-outline:hover { border-color: var(--green); color: var(--green); }
+  .btn-plan-filled { background: var(--green); color: var(--dark); }
+  .btn-plan-filled:hover { opacity: 0.85; }
+
+  /* ── CTA ── */
+  .cta-section {
+    text-align: center; padding: 120px 24px;
+    background: radial-gradient(ellipse 60% 80% at 50% 50%, rgba(0,232,122,0.07) 0%, transparent 70%);
+    border-top: 0.5px solid var(--border);
+  }
+  .cta-section h2 { font-family: 'Syne', sans-serif; font-size: clamp(32px, 5vw, 60px); font-weight: 800; color: var(--white); letter-spacing: -1.5px; line-height: 1.1; }
+  .cta-section p { color: var(--muted); font-size: 17px; margin: 20px auto 48px; max-width: 480px; }
+
+  /* ── FOOTER ── */
+  footer {
+    border-top: 0.5px solid var(--border);
+    padding: 40px 48px;
+    display: flex; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; gap: 16px;
+  }
+  .footer-logo { font-family: 'Syne', sans-serif; font-size: 18px; font-weight: 800; color: var(--white); }
+  .footer-logo span { color: var(--green); }
+  footer p { font-size: 13px; color: var(--muted); }
+
+  /* Scroll fade in */
+  .reveal { opacity: 0; transform: translateY(30px); transition: opacity 0.7s ease, transform 0.7s ease; }
+  .reveal.visible { opacity: 1; transform: none; }
+
+  @media (max-width: 768px) {
+    nav { padding: 16px 20px; }
+    .nav-links { display: none; }
+    .stats-bar { flex-direction: column; }
+    .stat-item { border-right: none; border-bottom: 0.5px solid var(--border); }
+    .ocpp-layout { grid-template-columns: 1fr; }
+    footer { flex-direction: column; text-align: center; }
+  }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="logo">Volt<span>Grid</span></div>
+  <ul class="nav-links">
+    <li><a href="#how">How it works</a></li>
+    <li><a href="#features">Features</a></li>
+    <li><a href="#ocpp">OCPP</a></li>
+    <li><a href="#pricing">Pricing</a></li>
+  </ul>
+  <a href="#cta" class="nav-cta">Get started</a>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-bg"></div>
+  <div class="hero-grid"></div>
+  <div class="badge"><span class="badge-dot"></span> OCPP 1.6 &amp; 2.0.1 Compliant</div>
+  <h1>Power your <em>EV network</em> from one platform</h1>
+  <p class="hero-sub">VoltGrid is the complete charge point operator platform — manage hardware, sessions, energy and revenue in real time.</p>
+  <div class="hero-actions">
+    <a href="#cta" class="btn-primary">Start for free</a>
+    <a href="dashboard.html" class="btn-ghost">View live dashboard →</a>
+  </div>
+  <div class="stats-bar">
+    <div class="stat-item">
+      <div class="stat-num">12<span>k+</span></div>
+      <div class="stat-label">Chargers managed</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-num">4.<span>2M</span></div>
+      <div class="stat-label">Sessions completed</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-num">99.<span>8%</span></div>
+      <div class="stat-label">Platform uptime</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-num">38<span>+</span></div>
+      <div class="stat-label">Countries</div>
+    </div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section class="how" id="how">
+  <div class="container">
+    <div class="reveal">
+      <div class="section-label">How it works</div>
+      <h2 class="section-title">From hardware to dashboard<br>in three steps</h2>
+      <p class="section-sub">Your charger connects to VoltGrid instantly using the OCPP protocol — no custom firmware required.</p>
+    </div>
+    <div class="steps reveal">
+      <div class="step-card">
+        <div class="step-num">01</div>
+        <div class="step-icon">🔌</div>
+        <div class="step-title">Connect your charger</div>
+        <div class="step-desc">Point your charger's OCPP endpoint to our WebSocket server. Any OCPP 1.6 or 2.0.1 compatible hardware works — Wallbox, ABB, Easee, Alfen and more.</div>
+      </div>
+      <div class="step-card">
+        <div class="step-num">02</div>
+        <div class="step-icon">📡</div>
+        <div class="step-title">Data flows in real time</div>
+        <div class="step-desc">The charger sends status heartbeats, meter values, and session events. VoltGrid processes and stores everything in your dedicated database.</div>
+      </div>
+      <div class="step-card">
+        <div class="step-num">03</div>
+        <div class="step-icon">📊</div>
+        <div class="step-title">Manage from your dashboard</div>
+        <div class="step-desc">Monitor every charger live, start or stop sessions remotely, view energy consumption, and track revenue — all from one interface.</div>
+      </div>
+      <div class="step-card">
+        <div class="step-num">04</div>
+        <div class="step-icon">💳</div>
+        <div class="step-title">Bill your customers</div>
+        <div class="step-desc">Flexible billing by kWh, session duration, or flat rate. Integrated payment processing so you get paid automatically.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section id="features">
+  <div class="container">
+    <div class="reveal">
+      <div class="section-label">Features</div>
+      <h2 class="section-title">Everything a CPO needs</h2>
+      <p class="section-sub">Built for operators running networks of any size — from 5 to 50,000 chargers.</p>
+    </div>
+    <div class="features-grid reveal">
+      <div class="feature-card">
+        <div class="feature-icon">⚡</div>
+        <div class="feature-title">Real-time monitoring</div>
+        <div class="feature-desc">Live status for every charger: available, charging, faulted, offline. Instant alerts when something goes wrong.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🗺️</div>
+        <div class="feature-title">Network map</div>
+        <div class="feature-desc">Visual map of your entire charge point network with live availability overlays — perfect for operators and drivers.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📈</div>
+        <div class="feature-title">Energy analytics</div>
+        <div class="feature-desc">Track kWh delivered per charger, per location, per time period. Export reports for grid balancing or billing.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🔐</div>
+        <div class="feature-title">RFID &amp; app auth</div>
+        <div class="feature-desc">Authenticate drivers via RFID card, mobile app, or plug-and-charge. Full whitelist and blacklist management.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🛠️</div>
+        <div class="feature-title">Remote commands</div>
+        <div class="feature-desc">Reset chargers, unlock cables, change configurations, and trigger firmware updates — all without leaving your desk.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🔗</div>
+        <div class="feature-title">REST API</div>
+        <div class="feature-desc">Full REST API so you can integrate VoltGrid into your own apps, eMSP platforms, or fleet management systems.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- OCPP DEEP DIVE -->
+<section class="ocpp-section" id="ocpp">
+  <div class="container">
+    <div class="reveal">
+      <div class="section-label">Protocol</div>
+      <h2 class="section-title">Built on OCPP —<br>the open standard</h2>
+    </div>
+    <div class="ocpp-layout reveal">
+      <div class="ocpp-diagram">
+        <div class="msg">
+          <span class="arrow-r">→</span>
+          <div class="msg-body">
+            <div><span class="msg-key">// Charger boots up</span></div>
+            <div>[2, <span class="msg-val">"abc123"</span>, <span class="msg-action">"BootNotification"</span>, {</div>
+            <div>&nbsp;&nbsp;<span class="msg-key">chargePointModel:</span> <span class="msg-val">"Wallbox Pro"</span>,</div>
+            <div>&nbsp;&nbsp;<span class="msg-key">vendor:</span> <span class="msg-val">"Wallbox"</span></div>
+            <div>}]</div>
+          </div>
+        </div>
+        <div class="msg">
+          <span class="arrow-l">←</span>
+          <div class="msg-body">
+            <div><span class="msg-key">// Server accepts</span></div>
+            <div>[3, <span class="msg-val">"abc123"</span>, {</div>
+            <div>&nbsp;&nbsp;<span class="msg-key">status:</span> <span class="msg-val">"Accepted"</span>,</div>
+            <div>&nbsp;&nbsp;<span class="msg-key">currentTime:</span> <span class="msg-val">"2025-04-14T10:00:00Z"</span></div>
+            <div>}]</div>
+          </div>
+        </div>
+        <hr class="divider-line">
+        <div class="msg">
+          <span class="arrow-r">→</span>
+          <div class="msg-body">
+            <div><span class="msg-key">// Charging session starts</span></div>
+            <div>[2, <span class="msg-val">"def456"</span>, <span class="msg-action">"StartTransaction"</span>, {</div>
+            <div>&nbsp;&nbsp;<span class="msg-key">connectorId:</span> <span class="msg-val">1</span>,</div>
+            <div>&nbsp;&nbsp;<span class="msg-key">idTag:</span> <span class="msg-val">"RFID-7A2C"</span>,</div>
+            <div>&nbsp;&nbsp;<span class="msg-key">meterStart:</span> <span class="msg-val">0</span></div>
+            <div>}]</div>
+          </div>
+        </div>
+        <div class="msg">
+          <span class="arrow-r">→</span>
+          <div class="msg-body">
+            <div><span class="msg-key">// Live energy reading</span></div>
+            <div>[2, <span class="msg-val">"ghi789"</span>, <span class="msg-action">"MeterValues"</span>, {</div>
+            <div>&nbsp;&nbsp;<span class="msg-key">energyActiveImportRegister:</span> <span class="msg-val">4820</span> <span class="msg-key">Wh</span></div>
+            <div>}]</div>
+          </div>
+        </div>
+      </div>
+      <ul class="ocpp-points">
+        <li class="ocpp-point">
+          <div class="ocpp-dot"></div>
+          <div>
+            <div class="ocpp-point-title">Industry standard protocol</div>
+            <div class="ocpp-point-desc">OCPP (Open Charge Point Protocol) is the universally adopted standard. Any charger that speaks OCPP can plug into VoltGrid — no vendor lock-in.</div>
+          </div>
+        </li>
+        <li class="ocpp-point">
+          <div class="ocpp-dot"></div>
+          <div>
+            <div class="ocpp-point-title">WebSocket based</div>
+            <div class="ocpp-point-desc">The charger opens a persistent WebSocket connection to our server. Messages flow both ways — the server can send remote commands at any time.</div>
+          </div>
+        </li>
+        <li class="ocpp-point">
+          <div class="ocpp-dot"></div>
+          <div>
+            <div class="ocpp-point-title">OCPP 1.6 and 2.0.1</div>
+            <div class="ocpp-point-desc">We support both versions. OCPP 1.6 is the most widely deployed; 2.0.1 adds smart charging, ISO 15118 Plug &amp; Charge, and enhanced security.</div>
+          </div>
+        </li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- PRICING -->
+<section id="pricing">
+  <div class="container">
+    <div class="reveal" style="text-align:center">
+      <div class="section-label">Pricing</div>
+      <h2 class="section-title">Simple, transparent pricing</h2>
+      <p class="section-sub" style="margin:0 auto">No hidden fees. Scale as your network grows.</p>
+    </div>
+    <div class="pricing-grid reveal">
+      <div class="price-card">
+        <div class="price-tier">Starter</div>
+        <div class="price-amount"><sup>$</sup>49<span class="price-period">/mo</span></div>
+        <div class="price-desc">Perfect for small networks and pilots.</div>
+        <ul class="price-features">
+          <li>Up to 25 charge points</li>
+          <li>Real-time dashboard</li>
+          <li>OCPP 1.6 support</li>
+          <li>Email alerts</li>
+          <li>Basic analytics</li>
+        </ul>
+        <a href="#cta" class="btn-plan btn-plan-outline">Get started</a>
+      </div>
+      <div class="price-card featured">
+        <div class="featured-badge">Most popular</div>
+        <div class="price-tier">Growth</div>
+        <div class="price-amount"><sup>$</sup>199<span class="price-period">/mo</span></div>
+        <div class="price-desc">For operators scaling their network.</div>
+        <ul class="price-features">
+          <li>Up to 500 charge points</li>
+          <li>OCPP 1.6 + 2.0.1</li>
+          <li>Smart charging profiles</li>
+          <li>Payment integration</li>
+          <li>Full REST API access</li>
+          <li>Priority support</li>
+        </ul>
+        <a href="#cta" class="btn-plan btn-plan-filled">Get started</a>
+      </div>
+      <div class="price-card">
+        <div class="price-tier">Enterprise</div>
+        <div class="price-amount" style="font-size:36px;padding-top:6px">Custom</div>
+        <div class="price-desc">Unlimited scale, dedicated infrastructure.</div>
+        <ul class="price-features">
+          <li>Unlimited charge points</li>
+          <li>White-label dashboard</li>
+          <li>SLA guarantee (99.9%)</li>
+          <li>Dedicated support engineer</li>
+          <li>On-premises option</li>
+          <li>Custom integrations</li>
+        </ul>
+        <a href="#cta" class="btn-plan btn-plan-outline">Contact us</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="cta-section" id="cta">
+  <div class="container">
+    <h2>Ready to build your<br><em style="color:var(--green);font-style:normal">charging network?</em></h2>
+    <p>Connect your first charger in under 10 minutes. No credit card required.</p>
+    <div style="display:flex;gap:16px;justify-content:center;flex-wrap:wrap">
+      <a href="#" class="btn-primary">Create free account</a>
+      <a href="dashboard.html" class="btn-ghost">See the dashboard</a>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-logo">Volt<span>Grid</span></div>
+  <p>© 2025 VoltGrid. Built with OCPP, Node.js &amp; passion for clean energy.</p>
+</footer>
+
+<script>
+  // Scroll reveal
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); } });
+  }, { threshold: 0.12 });
+  document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+</script>
+</body>
+</html>

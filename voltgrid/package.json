@@ -1,0 +1,16 @@
+{
+  "name": "voltgrid-cpo",
+  "version": "1.0.0",
+  "description": "VoltGrid Charge Point Operator Platform",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "simulate": "node simulator.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "ws": "^8.16.0",
+    "sql.js": "^1.11.0",
+    "cors": "^2.8.5"
+  }
+}
