@@ -52,9 +52,9 @@ async function initDb() {
   const defaultHash = hashPassword('admin123');
   const adminEmail = process.env.ADMIN_EMAIL || '';
   db.run(`INSERT OR IGNORE INTO users (username, password_hash, role, email) VALUES ('admin', '${defaultHash}', 'admin', '${adminEmail}');`);
-  // Update admin email if env var is set and existing row has no email
+  // Always sync admin email from ADMIN_EMAIL env var on startup
   if (adminEmail) {
-    db.run(`UPDATE users SET email = '${adminEmail}' WHERE username = 'admin' AND (email IS NULL OR email = '');`);
+    db.run(`UPDATE users SET email = '${adminEmail}' WHERE username = 'admin';`);
   }
 
   saveDb();
