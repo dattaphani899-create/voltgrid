@@ -5,6 +5,7 @@ const cors = require('cors');
 const initSqlJs = require('sql.js');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const app = express();
 app.use(cors());
@@ -41,6 +42,10 @@ async function initDb() {
   db.run(`CREATE TABLE IF NOT EXISTS sessions (id INTEGER PRIMARY KEY AUTOINCREMENT, charger_id TEXT, transaction_id INTEGER, id_tag TEXT, start_time TEXT, end_time TEXT, energy_kwh REAL DEFAULT 0, status TEXT DEFAULT 'Active');`);
   db.run(`CREATE TABLE IF NOT EXISTS meter_readings (id INTEGER PRIMARY KEY AUTOINCREMENT, charger_id TEXT, energy_wh REAL, power_w REAL, timestamp TEXT);`);
   db.run(`CREATE TABLE IF NOT EXISTS ocpp_log (id INTEGER PRIMARY KEY AUTOINCREMENT, charger_id TEXT, action TEXT, payload TEXT, direction TEXT, timestamp TEXT);`);
+  db.run(`CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE, password_hash TEXT, role TEXT DEFAULT 'operator');`);
+  // Seed default admin user (admin / admin123) — change password after first login
+  const defaultHash = hashPassword('admin123');
+  db.run(`INSERT OR IGNORE INTO users (username, password_hash, role) VALUES ('admin', '${defaultHash}', 'admin');`);
   saveDb();
   console.log('[DB] Database ready');
 }
@@ -71,6 +76,30 @@ function run(sql, params) {
     console.error('[DB]', e.message);
   }
 }
+
+// ── AUTH ──────────────────────────────────────────────────────────────────────
+const activeSessions = new Map(); // token → { username, role, createdAt }
+
+function hashPassword(password) {
+  return crypto.createHash('sha256').update(password).digest('hex');
+}
+
+function generateToken() {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+function requireAuth(req, res, next) {
+  const header = req.headers['authorization'];
+  if (!header || !header.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Unauthorised' });
+  }
+  const token = header.slice(7);
+  const session = activeSessions.get(token);
+  if (!session) return res.status(401).json({ error: 'Invalid or expired token' });
+  req.user = session;
+  next();
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 const connectedChargers = new Map();
 
@@ -145,17 +174,44 @@ function respond(ws, msgId, payload) {
   ws.send(JSON.stringify([3, msgId, payload]));
 }
 
-// REST API
-app.get('/api/chargers', (req, res) => res.json(query(`SELECT * FROM chargers ORDER BY id`)));
-app.get('/api/sessions', (req, res) => res.json(query(`SELECT * FROM sessions ORDER BY start_time DESC LIMIT 100`)));
-app.get('/api/log', (req, res) => res.json(query(`SELECT * FROM ocpp_log ORDER BY timestamp DESC LIMIT 100`)));
-app.get('/api/status', (req, res) => res.json({
+// ── AUTH ENDPOINTS ────────────────────────────────────────────────────────────
+app.post('/api/login', (req, res) => {
+  const { username, password } = req.body;
+  if (!username || !password) {
+    return res.status(400).json({ error: 'Username and password are required' });
+  }
+  const hash = hashPassword(password);
+  const users = query(`SELECT * FROM users WHERE username = ? AND password_hash = ?`, [username, hash]);
+  if (users.length === 0) {
+    return res.status(401).json({ error: 'Invalid username or password' });
+  }
+  const user = users[0];
+  const token = generateToken();
+  activeSessions.set(token, { username: user.username, role: user.role, createdAt: Date.now() });
+  res.json({ token, username: user.username, role: user.role });
+});
+
+app.post('/api/logout', requireAuth, (req, res) => {
+  const token = req.headers['authorization'].slice(7);
+  activeSessions.delete(token);
+  res.json({ ok: true });
+});
+
+app.get('/api/me', requireAuth, (req, res) => {
+  res.json({ username: req.user.username, role: req.user.role });
+});
+
+// ── PROTECTED REST API ────────────────────────────────────────────────────────
+app.get('/api/chargers', requireAuth, (_req, res) => res.json(query(`SELECT * FROM chargers ORDER BY id`)));
+app.get('/api/sessions', requireAuth, (_req, res) => res.json(query(`SELECT * FROM sessions ORDER BY start_time DESC LIMIT 100`)));
+app.get('/api/log', requireAuth, (_req, res) => res.json(query(`SELECT * FROM ocpp_log ORDER BY timestamp DESC LIMIT 100`)));
+app.get('/api/status', requireAuth, (_req, res) => res.json({
   connected: [...connectedChargers.keys()],
   chargers: (query(`SELECT COUNT(*) as c FROM chargers`)[0] || {}).c || 0,
   sessions: (query(`SELECT COUNT(*) as c FROM sessions WHERE status='Active'`)[0] || {}).c || 0,
   time: new Date().toISOString()
 }));
-app.post('/api/chargers/:id/command', (req, res) => {
+app.post('/api/chargers/:id/command', requireAuth, (req, res) => {
   const ws = connectedChargers.get(req.params.id);
   if (!ws) return res.status(404).json({ error: 'Not connected' });
   ws.send(JSON.stringify([2, 'cmd-' + Date.now(), req.body.action, req.body.payload || {}]));
