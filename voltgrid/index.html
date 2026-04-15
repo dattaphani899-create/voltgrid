@@ -552,6 +552,9 @@
 </footer>
 
 <script>
+  // Redirect root to login
+  window.location.replace('login.html');
+
   // Scroll reveal
   const observer = new IntersectionObserver(entries => {
     entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); } });
