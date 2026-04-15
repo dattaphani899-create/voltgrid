@@ -660,7 +660,9 @@
 
 <script>
   // Always talk to the Node backend on port 3000
-  const API_BASE = 'https://voltgrid-api-q2sf.onrender.com';
+  const API_BASE = ['localhost', '127.0.0.1'].includes(location.hostname)
+    ? 'http://localhost:3000'
+    : 'https://voltgrid-api-q2sf.onrender.com';
 
   // ── AUTH GUARD ────────────────────────────────────────────────────────────
   (function() {

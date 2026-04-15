@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>VoltGrid — Sign In</title>
+<title>VoltGrid — Create Account</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
@@ -59,7 +59,7 @@
     letter-spacing: 0.2px;
   }
 
-  .login-card {
+  .register-card {
     background: var(--card);
     border: 1px solid var(--border);
     border-radius: 16px;
@@ -116,7 +116,7 @@
     position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
     font-size: 15px; pointer-events: none; opacity: 0.6;
   }
-  input[type="text"], input[type="password"], input[type="number"] {
+  input[type="text"], input[type="password"] {
     width: 100%;
     background: var(--bg);
     border: 1px solid var(--border);
@@ -128,12 +128,18 @@
     outline: none;
     transition: border-color 0.15s, box-shadow 0.15s;
   }
-  input[type="text"]:focus, input[type="password"]:focus, input[type="number"]:focus {
+  input[type="text"]:focus, input[type="password"]:focus {
     border-color: var(--primary);
     box-shadow: 0 0 0 3px rgba(24,119,242,0.12);
     background: #fff;
   }
   input::placeholder { color: var(--muted); }
+
+  .hint-text {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 5px;
+  }
 
   .toggle-pw {
     position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
@@ -159,44 +165,22 @@
   }
   .error-msg.show { display: flex; }
 
-  /* OTP info banner */
-  .otp-info {
+  .success-msg {
     display: none;
     background: var(--green-light);
     border: 1px solid rgba(37,211,102,0.25);
     border-radius: 10px;
-    padding: 12px 14px;
+    padding: 10px 14px;
     font-size: 13px;
     color: var(--green-dark);
     margin-bottom: 18px;
+    align-items: center;
+    gap: 8px;
     font-weight: 500;
-    line-height: 1.5;
   }
-  .otp-info.show { display: block; }
+  .success-msg.show { display: flex; }
 
-  /* OTP digit input */
-  .otp-input {
-    width: 100%;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 14px;
-    font-family: 'Inter', sans-serif;
-    font-size: 28px;
-    font-weight: 700;
-    color: var(--text);
-    outline: none;
-    text-align: center;
-    letter-spacing: 10px;
-    transition: border-color 0.15s, box-shadow 0.15s;
-  }
-  .otp-input:focus {
-    border-color: var(--primary);
-    box-shadow: 0 0 0 3px rgba(24,119,242,0.12);
-    background: #fff;
-  }
-
-  .btn-login {
+  .btn-register {
     width: 100%;
     background: var(--primary);
     color: #fff;
@@ -212,25 +196,9 @@
     margin-top: 6px;
     position: relative;
   }
-  .btn-login:hover { background: var(--primary-hover); box-shadow: 0 4px 16px rgba(24,119,242,0.35); transform: translateY(-1px); }
-  .btn-login:active { transform: translateY(0); }
-  .btn-login:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
-
-  .btn-secondary {
-    width: 100%;
-    background: transparent;
-    color: var(--primary);
-    font-family: 'Inter', sans-serif;
-    font-weight: 600;
-    font-size: 13px;
-    padding: 10px;
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    cursor: pointer;
-    margin-top: 10px;
-    transition: background 0.15s;
-  }
-  .btn-secondary:hover { background: var(--primary-light); }
+  .btn-register:hover { background: var(--primary-hover); box-shadow: 0 4px 16px rgba(24,119,242,0.35); transform: translateY(-1px); }
+  .btn-register:active { transform: translateY(0); }
+  .btn-register:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
 
   .spinner {
     display: none;
@@ -242,8 +210,8 @@
     position: absolute; right: 18px; top: 50%; transform: translateY(-50%);
   }
   @keyframes spin { to { transform: translateY(-50%) rotate(360deg); } }
-  .btn-login.loading .spinner { display: block; }
-  .btn-login.loading .btn-text { opacity: 0.75; }
+  .btn-register.loading .spinner { display: block; }
+  .btn-register.loading .btn-text { opacity: 0.75; }
 
   .back-link {
     margin-top: 24px;
@@ -279,15 +247,6 @@
     animation: pulse 2s infinite;
   }
   @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(1.4)} }
-
-  /* OTP timer */
-  .otp-timer {
-    text-align: center;
-    font-size: 12px;
-    color: var(--muted);
-    margin-top: 10px;
-  }
-  .otp-timer span { font-weight: 600; color: var(--text-2); }
 </style>
 </head>
 <body>
@@ -296,23 +255,27 @@
 <div class="tagline">Charge Point Operator Platform</div>
 <div class="live-badge"><span class="live-dot"></span> System Online</div>
 
-<div class="login-card">
+<div class="register-card">
 
   <div class="card-header">
-    <div class="card-icon" id="card-icon">🔐</div>
+    <div class="card-icon">🆕</div>
     <div>
-      <div class="card-title" id="card-title">Operator Sign In</div>
-      <div class="card-sub" id="card-sub">Access your control dashboard</div>
+      <div class="card-title">Create Account</div>
+      <div class="card-sub">Register as an operator</div>
     </div>
   </div>
 
   <div class="error-msg" id="error-msg">
     <span>⚠️</span>
-    <span id="error-text">Invalid username or password</span>
+    <span id="error-text">Something went wrong</span>
   </div>
 
-  <!-- Step 1: Credentials -->
-  <form id="login-form" autocomplete="on">
+  <div class="success-msg" id="success-msg">
+    <span>✅</span>
+    <span id="success-text">Account created! Redirecting to sign in…</span>
+  </div>
+
+  <form id="register-form" autocomplete="on">
     <div class="form-group">
       <label for="username">Username</label>
       <div class="input-wrap">
@@ -321,11 +284,28 @@
           type="text"
           id="username"
           name="username"
-          placeholder="Enter your username"
+          placeholder="Choose a username"
           autocomplete="username"
           required
         >
       </div>
+      <div class="hint-text">Minimum 3 characters</div>
+    </div>
+
+    <div class="form-group">
+      <label for="email">Email Address</label>
+      <div class="input-wrap">
+        <span class="input-icon">📧</span>
+        <input
+          type="text"
+          id="email"
+          name="email"
+          placeholder="Enter your email address"
+          autocomplete="email"
+          required
+        >
+      </div>
+      <div class="hint-text">OTP will be sent here when you sign in</div>
     </div>
 
     <div class="form-group">
@@ -336,54 +316,39 @@
           type="password"
           id="password"
           name="password"
-          placeholder="Enter your password"
-          autocomplete="current-password"
+          placeholder="Choose a password"
+          autocomplete="new-password"
           required
         >
         <button type="button" class="toggle-pw" id="toggle-pw" aria-label="Toggle password visibility">👁️</button>
       </div>
+      <div class="hint-text">Minimum 6 characters</div>
     </div>
 
-    <button type="submit" class="btn-login" id="btn-login">
-      <span class="btn-text">Continue</span>
+    <div class="form-group">
+      <label for="confirm-password">Confirm Password</label>
+      <div class="input-wrap">
+        <span class="input-icon">🔑</span>
+        <input
+          type="password"
+          id="confirm-password"
+          name="confirm-password"
+          placeholder="Re-enter your password"
+          autocomplete="new-password"
+          required
+        >
+      </div>
+    </div>
+
+    <button type="submit" class="btn-register" id="btn-register">
+      <span class="btn-text">Create Account</span>
       <span class="spinner"></span>
     </button>
   </form>
 
-  <!-- Step 2: OTP (hidden initially) -->
-  <div id="otp-section" style="display:none;">
-    <div class="otp-info show" id="otp-info">
-      A 6-digit OTP has been sent to <strong id="otp-email-display"></strong>. Enter it below to complete sign-in.
-    </div>
-
-    <form id="otp-form">
-      <div class="form-group">
-        <label for="otp">One-Time Password</label>
-        <input
-          type="text"
-          id="otp"
-          class="otp-input"
-          maxlength="6"
-          placeholder="— — — — — —"
-          inputmode="numeric"
-          autocomplete="one-time-code"
-          required
-        >
-      </div>
-      <div class="otp-timer" id="otp-timer">Expires in <span id="otp-countdown">5:00</span></div>
-
-      <button type="submit" class="btn-login" id="btn-otp" style="margin-top:18px;">
-        <span class="btn-text">Verify OTP</span>
-        <span class="spinner"></span>
-      </button>
-      <button type="button" class="btn-secondary" id="btn-back">← Back to sign in</button>
-    </form>
-  </div>
-
 </div>
 
-<div class="back-link">Don't have an account? <a href="register.html">Create one</a></div>
-<div class="back-link" style="margin-top:10px;">← <a href="index.html">Back to public site</a></div>
+<div class="back-link">Already have an account? <a href="login.html">Sign in</a></div>
 
 <script>
   const API_BASE = ['localhost', '127.0.0.1'].includes(location.hostname)
@@ -398,9 +363,6 @@
       .catch(() => {});
   }
 
-  let pendingUsername = null;
-  let otpTimerInterval = null;
-
   // Password visibility toggle
   document.getElementById('toggle-pw').addEventListener('click', () => {
     const pw = document.getElementById('password');
@@ -414,68 +376,42 @@
     }
   });
 
-  // Step 1 — submit credentials
-  document.getElementById('login-form').addEventListener('submit', async (e) => {
+  document.getElementById('register-form').addEventListener('submit', async (e) => {
     e.preventDefault();
 
     const username = document.getElementById('username').value.trim();
+    const email = document.getElementById('email').value.trim();
     const password = document.getElementById('password').value;
-    const btn = document.getElementById('btn-login');
+    const confirm = document.getElementById('confirm-password').value;
+    const btn = document.getElementById('btn-register');
 
-    hideError();
-    btn.disabled = true;
-    btn.classList.add('loading');
+    document.getElementById('error-msg').classList.remove('show');
+    document.getElementById('success-msg').classList.remove('show');
 
-    try {
-      const res = await fetch(`${API_BASE}/api/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
-      });
-
-      const data = await res.json();
-
-      if (res.ok && data.otpRequired) {
-        pendingUsername = data.username;
-        showOtpStep(data.maskedEmail, data.devOtp);
-      } else {
-        showError(data.error || 'Invalid username or password');
-      }
-    } catch (err) {
-      showError('Cannot connect to server. Is VoltGrid running?');
-    } finally {
-      btn.disabled = false;
-      btn.classList.remove('loading');
+    if (password !== confirm) {
+      showError('Passwords do not match');
+      return;
     }
-  });
 
-  // Step 2 — submit OTP
-  document.getElementById('otp-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-
-    const otp = document.getElementById('otp').value.trim();
-    const btn = document.getElementById('btn-otp');
-
-    hideError();
     btn.disabled = true;
     btn.classList.add('loading');
 
     try {
-      const res = await fetch(`${API_BASE}/api/verify-otp`, {
+      const res = await fetch(`${API_BASE}/api/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: pendingUsername, otp })
+        body: JSON.stringify({ username, email, password })
       });
 
       const data = await res.json();
 
-      if (res.ok && data.token) {
-        clearInterval(otpTimerInterval);
-        localStorage.setItem('vg_token', data.token);
-        localStorage.setItem('vg_user', JSON.stringify({ username: data.username, role: data.role }));
-        window.location.replace('dashboard.html');
+      if (res.ok) {
+        document.getElementById('success-text').textContent = data.message || 'Account created! Redirecting to sign in…';
+        document.getElementById('success-msg').classList.add('show');
+        document.getElementById('register-form').reset();
+        setTimeout(() => window.location.replace('login.html'), 2000);
       } else {
-        showError(data.error || 'Invalid OTP. Please try again.');
+        showError(data.error || 'Registration failed. Please try again.');
         btn.disabled = false;
         btn.classList.remove('loading');
       }
@@ -486,75 +422,9 @@
     }
   });
 
-  // Back button — return to Step 1
-  document.getElementById('btn-back').addEventListener('click', () => {
-    clearInterval(otpTimerInterval);
-    pendingUsername = null;
-    document.getElementById('otp-section').style.display = 'none';
-    document.getElementById('login-form').style.display = 'block';
-    document.getElementById('card-icon').textContent = '🔐';
-    document.getElementById('card-title').textContent = 'Operator Sign In';
-    document.getElementById('card-sub').textContent = 'Access your control dashboard';
-    document.getElementById('otp').value = '';
-    document.getElementById('password').value = '';
-    hideError();
-  });
-
-  // Only allow digits in OTP field
-  document.getElementById('otp').addEventListener('input', (e) => {
-    e.target.value = e.target.value.replace(/\D/g, '').slice(0, 6);
-  });
-
-  function showOtpStep(maskedEmail, devOtp) {
-    document.getElementById('login-form').style.display = 'none';
-    document.getElementById('otp-section').style.display = 'block';
-    document.getElementById('card-icon').textContent = '📧';
-    document.getElementById('card-title').textContent = 'Check Your Email';
-
-    if (devOtp) {
-      // Dev mode — show OTP directly on screen
-      document.getElementById('otp-info').innerHTML =
-        `<strong>Dev mode</strong> (no SMTP configured) — your OTP is: ` +
-        `<span style="font-size:20px;font-weight:800;letter-spacing:4px;">${devOtp}</span>`;
-      document.getElementById('card-sub').textContent = 'OTP shown below (dev mode)';
-      // Auto-fill the OTP input
-      document.getElementById('otp').value = devOtp;
-    } else {
-      document.getElementById('otp-email-display').textContent = maskedEmail;
-      document.getElementById('card-sub').textContent = 'Enter the OTP we just sent you';
-    }
-
-    document.getElementById('otp').focus();
-    startCountdown(5 * 60);
-  }
-
-  function startCountdown(seconds) {
-    clearInterval(otpTimerInterval);
-    const el = document.getElementById('otp-countdown');
-    let remaining = seconds;
-    function tick() {
-      const m = Math.floor(remaining / 60);
-      const s = remaining % 60;
-      el.textContent = `${m}:${s.toString().padStart(2, '0')}`;
-      if (remaining <= 0) {
-        clearInterval(otpTimerInterval);
-        el.textContent = 'Expired';
-        document.getElementById('btn-otp').disabled = true;
-        showError('OTP has expired. Please go back and sign in again.');
-      }
-      remaining--;
-    }
-    tick();
-    otpTimerInterval = setInterval(tick, 1000);
-  }
-
   function showError(msg) {
     document.getElementById('error-text').textContent = msg;
     document.getElementById('error-msg').classList.add('show');
-  }
-
-  function hideError() {
-    document.getElementById('error-msg').classList.remove('show');
   }
 </script>
 </body>

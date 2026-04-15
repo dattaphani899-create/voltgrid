@@ -6,6 +6,7 @@ const initSqlJs = require('sql.js');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const nodemailer = require('nodemailer');
 
 const app = express();
 app.use(cors());
@@ -42,10 +43,20 @@ async function initDb() {
   db.run(`CREATE TABLE IF NOT EXISTS sessions (id INTEGER PRIMARY KEY AUTOINCREMENT, charger_id TEXT, transaction_id INTEGER, id_tag TEXT, start_time TEXT, end_time TEXT, energy_kwh REAL DEFAULT 0, status TEXT DEFAULT 'Active');`);
   db.run(`CREATE TABLE IF NOT EXISTS meter_readings (id INTEGER PRIMARY KEY AUTOINCREMENT, charger_id TEXT, energy_wh REAL, power_w REAL, timestamp TEXT);`);
   db.run(`CREATE TABLE IF NOT EXISTS ocpp_log (id INTEGER PRIMARY KEY AUTOINCREMENT, charger_id TEXT, action TEXT, payload TEXT, direction TEXT, timestamp TEXT);`);
-  db.run(`CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE, password_hash TEXT, role TEXT DEFAULT 'operator');`);
-  // Seed default admin user (admin / admin123) — change password after first login
+  db.run(`CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE, password_hash TEXT, role TEXT DEFAULT 'operator', email TEXT);`);
+
+  // Add email column to existing DBs that don't have it yet
+  try { db.run(`ALTER TABLE users ADD COLUMN email TEXT;`); } catch (_) {}
+
+  // Seed default admin user — email comes from env var ADMIN_EMAIL
   const defaultHash = hashPassword('admin123');
-  db.run(`INSERT OR IGNORE INTO users (username, password_hash, role) VALUES ('admin', '${defaultHash}', 'admin');`);
+  const adminEmail = process.env.ADMIN_EMAIL || '';
+  db.run(`INSERT OR IGNORE INTO users (username, password_hash, role, email) VALUES ('admin', '${defaultHash}', 'admin', '${adminEmail}');`);
+  // Update admin email if env var is set and existing row has no email
+  if (adminEmail) {
+    db.run(`UPDATE users SET email = '${adminEmail}' WHERE username = 'admin' AND (email IS NULL OR email = '');`);
+  }
+
   saveDb();
   console.log('[DB] Database ready');
 }
@@ -77,8 +88,49 @@ function run(sql, params) {
   }
 }
 
+// ── EMAIL (nodemailer) ────────────────────────────────────────────────────────
+// Set these env vars on your server / Render dashboard:
+//   SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM
+// For Gmail use: SMTP_HOST=smtp.gmail.com, SMTP_PORT=587
+//                SMTP_USER=you@gmail.com, SMTP_PASS=<App Password>
+const transporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST || 'smtp.gmail.com',
+  port: parseInt(process.env.SMTP_PORT || '587'),
+  secure: false,
+  auth: {
+    user: process.env.SMTP_USER || '',
+    pass: process.env.SMTP_PASS || '',
+  },
+});
+
+async function sendOtpEmail(toEmail, otp) {
+  if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+    // No SMTP configured — log OTP to console for local dev
+    console.log(`[OTP] Email not configured. OTP for ${toEmail}: ${otp}`);
+    return;
+  }
+  const from = process.env.SMTP_FROM || process.env.SMTP_USER;
+  await transporter.sendMail({
+    from: `"VoltGrid" <${from}>`,
+    to: toEmail,
+    subject: 'Your VoltGrid login OTP',
+    html: `
+      <div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;">
+        <h2 style="color:#1877F2;">VoltGrid — One-Time Password</h2>
+        <p>Use the code below to complete your sign-in. It expires in <strong>5 minutes</strong>.</p>
+        <div style="font-size:36px;font-weight:700;letter-spacing:10px;text-align:center;
+                    background:#F0F2F5;border-radius:12px;padding:20px;margin:24px 0;color:#050505;">
+          ${otp}
+        </div>
+        <p style="color:#65676B;font-size:13px;">If you did not request this, you can safely ignore this email.</p>
+      </div>
+    `,
+  });
+}
+
 // ── AUTH ──────────────────────────────────────────────────────────────────────
 const activeSessions = new Map(); // token → { username, role, createdAt }
+const pendingOtps = new Map();    // username → { otp, expiresAt, email }
 
 function hashPassword(password) {
   return crypto.createHash('sha256').update(password).digest('hex');
@@ -86,6 +138,10 @@ function hashPassword(password) {
 
 function generateToken() {
   return crypto.randomBytes(32).toString('hex');
+}
+
+function generateOtp() {
+  return String(Math.floor(100000 + Math.random() * 900000)); // 6 digits
 }
 
 function requireAuth(req, res, next) {
@@ -175,7 +231,9 @@ function respond(ws, msgId, payload) {
 }
 
 // ── AUTH ENDPOINTS ────────────────────────────────────────────────────────────
-app.post('/api/login', (req, res) => {
+
+// Step 1 — validate credentials, send OTP to registered email
+app.post('/api/login', async (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) {
     return res.status(400).json({ error: 'Username and password are required' });
@@ -186,9 +244,99 @@ app.post('/api/login', (req, res) => {
     return res.status(401).json({ error: 'Invalid username or password' });
   }
   const user = users[0];
+
+  if (!user.email) {
+    return res.status(403).json({
+      error: 'No email address on file for this account. Please contact your administrator.',
+    });
+  }
+
+  const otp = generateOtp();
+  pendingOtps.set(username, { otp, expiresAt: Date.now() + 5 * 60 * 1000, email: user.email });
+
+  const smtpConfigured = !!(process.env.SMTP_USER && process.env.SMTP_PASS);
+
+  if (smtpConfigured) {
+    try {
+      await sendOtpEmail(user.email, otp);
+    } catch (e) {
+      console.error('[OTP] Failed to send email:', e.message);
+      return res.status(500).json({ error: 'Failed to send OTP email. Please try again.' });
+    }
+  } else {
+    console.log(`[OTP DEV] OTP for ${username}: ${otp}`);
+  }
+
+  // Mask the email for display: a****@gmail.com
+  const [localPart, domain] = user.email.split('@');
+  const masked = localPart.slice(0, 2) + '****@' + domain;
+
+  res.json({
+    otpRequired: true,
+    maskedEmail: masked,
+    username,
+    // Return OTP directly in dev mode (no SMTP configured)
+    devOtp: smtpConfigured ? undefined : otp,
+  });
+});
+
+// Step 2 — verify OTP and issue session token
+app.post('/api/verify-otp', (req, res) => {
+  const { username, otp } = req.body;
+  if (!username || !otp) {
+    return res.status(400).json({ error: 'Username and OTP are required' });
+  }
+
+  const pending = pendingOtps.get(username);
+  if (!pending) {
+    return res.status(400).json({ error: 'No OTP requested for this account. Please sign in again.' });
+  }
+  if (Date.now() > pending.expiresAt) {
+    pendingOtps.delete(username);
+    return res.status(400).json({ error: 'OTP has expired. Please sign in again.' });
+  }
+  if (otp.trim() !== pending.otp) {
+    return res.status(401).json({ error: 'Incorrect OTP. Please try again.' });
+  }
+
+  pendingOtps.delete(username);
+
+  const users = query(`SELECT * FROM users WHERE username = ?`, [username]);
+  if (users.length === 0) {
+    return res.status(401).json({ error: 'User not found.' });
+  }
+  const user = users[0];
   const token = generateToken();
   activeSessions.set(token, { username: user.username, role: user.role, createdAt: Date.now() });
   res.json({ token, username: user.username, role: user.role });
+});
+
+// Register new user
+app.post('/api/register', (req, res) => {
+  const { username, password, email } = req.body;
+  if (!username || !password || !email) {
+    return res.status(400).json({ error: 'Username, email and password are required' });
+  }
+  if (username.length < 3) {
+    return res.status(400).json({ error: 'Username must be at least 3 characters' });
+  }
+  if (password.length < 6) {
+    return res.status(400).json({ error: 'Password must be at least 6 characters' });
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.status(400).json({ error: 'Please enter a valid email address' });
+  }
+  const existingUser = query(`SELECT id FROM users WHERE username = ?`, [username]);
+  if (existingUser.length > 0) {
+    return res.status(409).json({ error: 'Username already taken' });
+  }
+  const existingEmail = query(`SELECT id FROM users WHERE email = ?`, [email]);
+  if (existingEmail.length > 0) {
+    return res.status(409).json({ error: 'An account with this email already exists' });
+  }
+  const hash = hashPassword(password);
+  run(`INSERT INTO users (username, password_hash, role, email) VALUES (?, ?, 'operator', ?)`, [username, hash, email]);
+  res.status(201).json({ ok: true, message: 'Account created. You can now sign in.' });
 });
 
 app.post('/api/logout', requireAuth, (req, res) => {
