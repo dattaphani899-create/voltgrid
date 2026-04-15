@@ -9,7 +9,9 @@
 const WebSocket = require('ws');
 
 const CHARGER_ID = 'SIM-001';
-const SERVER_URL = `ws://localhost:3000/ocpp/${CHARGER_ID}`;
+const isLocal = process.argv.includes('--local');
+const BASE_URL = isLocal ? 'ws://localhost:3000' : 'wss://voltgrid-api-q2sf.onrender.com';
+const SERVER_URL = `${BASE_URL}/ocpp/${CHARGER_ID}`;
 
 let msgCounter = 1;
 let transactionId = null;
