@@ -661,6 +661,7 @@
     ['CP-007','MeterValues → power: 11400 W, temperature: 100°C'],
     ['CP-008','StatusNotification → status: Offline, errorCode: PowerLoss'],
   ];
+  // Just added CP08
   let li = 0;
   setInterval(() => {
     const [cp, msg] = logMessages[li % logMessages.length]; li++;
