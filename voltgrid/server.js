@@ -128,9 +128,38 @@ async function sendOtpEmail(toEmail, otp) {
   });
 }
 
+async function sendResetEmail(toEmail, resetLink) {
+  if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+    console.log(`[RESET DEV] Password reset link for ${toEmail}: ${resetLink}`);
+    return;
+  }
+  const from = process.env.SMTP_FROM || process.env.SMTP_USER;
+  await transporter.sendMail({
+    from: `"VoltGrid" <${from}>`,
+    to: toEmail,
+    subject: 'Reset your VoltGrid password',
+    html: `
+      <div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;">
+        <h2 style="color:#1877F2;">VoltGrid — Password Reset</h2>
+        <p>We received a request to reset your password. Click the button below to set a new one.</p>
+        <p>This link expires in <strong>15 minutes</strong>.</p>
+        <div style="text-align:center;margin:28px 0;">
+          <a href="${resetLink}" style="background:#1877F2;color:#fff;text-decoration:none;
+             padding:14px 32px;border-radius:10px;font-weight:700;font-size:15px;display:inline-block;">
+            Reset Password
+          </a>
+        </div>
+        <p style="color:#65676B;font-size:13px;">If you did not request this, you can safely ignore this email. Your password will not change.</p>
+        <p style="color:#65676B;font-size:12px;word-break:break-all;">Or copy this link: ${resetLink}</p>
+      </div>
+    `,
+  });
+}
+
 // ── AUTH ──────────────────────────────────────────────────────────────────────
-const activeSessions = new Map(); // token → { username, role, createdAt }
-const pendingOtps = new Map();    // username → { otp, expiresAt, email }
+const activeSessions = new Map();  // token → { username, role, createdAt }
+const pendingOtps = new Map();     // username → { otp, expiresAt, email }
+const resetTokens = new Map();     // token → { username, expiresAt }
 
 function hashPassword(password) {
   return crypto.createHash('sha256').update(password).digest('hex');
@@ -337,6 +366,59 @@ app.post('/api/register', (req, res) => {
   const hash = hashPassword(password);
   run(`INSERT INTO users (username, password_hash, role, email) VALUES (?, ?, 'operator', ?)`, [username, hash, email]);
   res.status(201).json({ ok: true, message: 'Account created. You can now sign in.' });
+});
+
+// Forgot password — send reset link to email
+app.post('/api/forgot-password', async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ error: 'Email is required' });
+
+  const users = query(`SELECT * FROM users WHERE email = ?`, [email]);
+  // Always respond with success to prevent email enumeration
+  if (users.length === 0) {
+    return res.json({ ok: true, message: 'If that email exists, a reset link has been sent.' });
+  }
+
+  const user = users[0];
+  const token = generateToken();
+  resetTokens.set(token, { username: user.username, expiresAt: Date.now() + 15 * 60 * 1000 });
+
+  const baseUrl = process.env.BASE_URL || 'https://voltgrid-api-q2sf.onrender.com';
+  const resetLink = `${baseUrl}/reset-password.html?token=${token}`;
+
+  try {
+    await sendResetEmail(email, resetLink);
+  } catch (e) {
+    console.error('[RESET] Failed to send email:', e.message);
+    return res.status(500).json({ error: 'Failed to send reset email. Please try again.' });
+  }
+
+  res.json({ ok: true, message: 'If that email exists, a reset link has been sent.' });
+});
+
+// Reset password — validate token and set new password
+app.post('/api/reset-password', (req, res) => {
+  const { token, password } = req.body;
+  if (!token || !password) return res.status(400).json({ error: 'Token and new password are required' });
+  if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
+
+  const pending = resetTokens.get(token);
+  if (!pending) return res.status(400).json({ error: 'Invalid or already used reset link.' });
+  if (Date.now() > pending.expiresAt) {
+    resetTokens.delete(token);
+    return res.status(400).json({ error: 'Reset link has expired. Please request a new one.' });
+  }
+
+  const hash = hashPassword(password);
+  run(`UPDATE users SET password_hash = ? WHERE username = ?`, [hash, pending.username]);
+  resetTokens.delete(token);
+
+  // Invalidate all active sessions for this user
+  for (const [t, s] of activeSessions) {
+    if (s.username === pending.username) activeSessions.delete(t);
+  }
+
+  res.json({ ok: true, message: 'Password updated successfully. You can now sign in.' });
 });
 
 app.post('/api/logout', requireAuth, (req, res) => {
