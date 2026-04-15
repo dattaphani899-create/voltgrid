@@ -101,7 +101,19 @@ const transporter = nodemailer.createTransport({
     user: process.env.SMTP_USER || '',
     pass: process.env.SMTP_PASS || '',
   },
+  tls: { rejectUnauthorized: false },
 });
+
+// Verify SMTP connection on startup
+if (process.env.SMTP_USER && process.env.SMTP_PASS) {
+  transporter.verify((err) => {
+    if (err) {
+      console.error('[SMTP] Connection FAILED:', err.message);
+    } else {
+      console.log('[SMTP] Connection OK — ready to send emails');
+    }
+  });
+}
 
 async function sendOtpEmail(toEmail, otp) {
   if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
@@ -389,9 +401,12 @@ app.post('/api/forgot-password', async (req, res) => {
 
   try {
     await sendResetEmail(email, resetLink);
+    console.log(`[RESET] Email sent successfully to ${email}`);
   } catch (e) {
     console.error('[RESET] Failed to send email:', e.message);
-    return res.status(500).json({ error: 'Failed to send reset email. Please try again.' });
+    console.error('[RESET] Full error:', e);
+    resetTokens.delete(token); // clean up token if email failed
+    return res.status(500).json({ error: `Failed to send reset email: ${e.message}` });
   }
 
   res.json({ ok: true, message: 'If that email exists, a reset link has been sent.' });
