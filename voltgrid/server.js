@@ -219,12 +219,13 @@ app.post('/api/chargers/:id/command', requireAuth, (req, res) => {
 });
 
 initDb().then(() => {
-  server.listen(3000, () => {
+  const PORT = process.env.PORT || 3000;
+  server.listen(PORT, () => {
     console.log(`
   +-----------------------------------------+
   |  VoltGrid Backend running!              |
-  |  Dashboard: http://localhost:3000/      |
-  |  OCPP:      ws://localhost:3000/ocpp    |
+  |  Dashboard: http://localhost:${PORT}/      |
+  |  OCPP:      ws://localhost:${PORT}/ocpp    |
   +-----------------------------------------+
     `);
   });

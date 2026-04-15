@@ -659,12 +659,15 @@
 </main>
 
 <script>
+  // Always talk to the Node backend on port 3000
+  const API_BASE = 'https://voltgrid-api-q2sf.onrender.com';
+
   // ── AUTH GUARD ────────────────────────────────────────────────────────────
   (function() {
     const token = localStorage.getItem('vg_token');
     if (!token) { window.location.replace('login.html'); return; }
 
-    fetch('/api/me', { headers: { 'Authorization': 'Bearer ' + token } })
+    fetch(`${API_BASE}/api/me`, { headers: { 'Authorization': 'Bearer ' + token } })
       .then(r => {
         if (!r.ok) { localStorage.removeItem('vg_token'); window.location.replace('login.html'); return; }
         return r.json();
@@ -678,7 +681,7 @@
   document.getElementById('btn-logout').addEventListener('click', async () => {
     const token = localStorage.getItem('vg_token');
     if (token) {
-      await fetch('/api/logout', { method: 'POST', headers: { 'Authorization': 'Bearer ' + token } }).catch(() => {});
+      await fetch(`${API_BASE}/api/logout`, { method: 'POST', headers: { 'Authorization': 'Bearer ' + token } }).catch(() => {});
       localStorage.removeItem('vg_token');
       localStorage.removeItem('vg_user');
     }
