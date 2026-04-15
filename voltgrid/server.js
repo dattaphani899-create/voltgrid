@@ -383,8 +383,9 @@ app.post('/api/forgot-password', async (req, res) => {
   const token = generateToken();
   resetTokens.set(token, { username: user.username, expiresAt: Date.now() + 15 * 60 * 1000 });
 
-  const baseUrl = process.env.BASE_URL || 'https://voltgrid-api-q2sf.onrender.com';
+  const baseUrl = (process.env.BASE_URL || 'https://voltgrid-api-q2sf.onrender.com').replace(/\/$/, '');
   const resetLink = `${baseUrl}/reset-password.html?token=${token}`;
+  console.log(`[RESET] Link generated for ${user.username}: ${resetLink}`);
 
   try {
     await sendResetEmail(email, resetLink);
