@@ -52,12 +52,49 @@ async function run(sql, params) {
 }
 
 async function initDb() {
+  // Base tables
   await run(`CREATE TABLE IF NOT EXISTS chargers (id TEXT PRIMARY KEY, status TEXT DEFAULT 'Unavailable', power_kw REAL DEFAULT 0, last_seen TEXT, vendor TEXT, model TEXT)`);
   await run(`CREATE TABLE IF NOT EXISTS sessions (id SERIAL PRIMARY KEY, charger_id TEXT, transaction_id INTEGER, id_tag TEXT, start_time TEXT, end_time TEXT, energy_kwh REAL DEFAULT 0, status TEXT DEFAULT 'Active')`);
   await run(`CREATE TABLE IF NOT EXISTS meter_readings (id SERIAL PRIMARY KEY, charger_id TEXT, energy_wh REAL, power_w REAL, timestamp TEXT)`);
   await run(`CREATE TABLE IF NOT EXISTS ocpp_log (id SERIAL PRIMARY KEY, charger_id TEXT, action TEXT, payload TEXT, direction TEXT, timestamp TEXT)`);
   await run(`CREATE TABLE IF NOT EXISTS users (id SERIAL PRIMARY KEY, username TEXT UNIQUE, password_hash TEXT, role TEXT DEFAULT 'operator', email TEXT)`);
-  await run(`ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT`);
+
+  // ── Phase 1: Multi-connector schema expansion ──
+  // Add metadata columns to chargers table
+  await run(`ALTER TABLE chargers ADD COLUMN IF NOT EXISTS charger_type TEXT DEFAULT 'AC'`);
+  await run(`ALTER TABLE chargers ADD COLUMN IF NOT EXISTS location_name TEXT`);
+  await run(`ALTER TABLE chargers ADD COLUMN IF NOT EXISTS address TEXT`);
+  await run(`ALTER TABLE chargers ADD COLUMN IF NOT EXISTS latitude REAL`);
+  await run(`ALTER TABLE chargers ADD COLUMN IF NOT EXISTS longitude REAL`);
+  await run(`ALTER TABLE chargers ADD COLUMN IF NOT EXISTS auth_key TEXT UNIQUE`);
+  await run(`ALTER TABLE chargers ADD COLUMN IF NOT EXISTS provisioning_status TEXT DEFAULT 'Provisioning'`);
+  await run(`CREATE INDEX IF NOT EXISTS idx_chargers_auth_key ON chargers(auth_key)`);
+
+  // Create connectors table (one charger → many connectors)
+  await run(`CREATE TABLE IF NOT EXISTS connectors (
+    id SERIAL PRIMARY KEY,
+    charger_id TEXT NOT NULL,
+    connector_id INTEGER NOT NULL,
+    connector_type TEXT DEFAULT 'AC',
+    voltage INTEGER DEFAULT 230,
+    amperage REAL DEFAULT 32,
+    power_rating_kw REAL DEFAULT 7.4,
+    status TEXT DEFAULT 'Available',
+    created_at TIMESTAMP DEFAULT NOW(),
+    UNIQUE(charger_id, connector_id),
+    FOREIGN KEY(charger_id) REFERENCES chargers(id) ON DELETE CASCADE
+  )`);
+  await run(`CREATE INDEX IF NOT EXISTS idx_connectors_charger ON connectors(charger_id)`);
+
+  // Add connector tracking to sessions
+  await run(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS connector_id INTEGER DEFAULT 1`);
+  await run(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS auth_key TEXT`);
+  await run(`CREATE INDEX IF NOT EXISTS idx_sessions_charger_connector ON sessions(charger_id, connector_id)`);
+  await run(`CREATE INDEX IF NOT EXISTS idx_sessions_active ON sessions(status, connector_id) WHERE status='Active'`);
+
+  // Add connector tracking to meter_readings
+  await run(`ALTER TABLE meter_readings ADD COLUMN IF NOT EXISTS connector_id INTEGER DEFAULT 1`);
+  await run(`CREATE INDEX IF NOT EXISTS idx_meter_readings_charger_connector ON meter_readings(charger_id, connector_id)`);
 
   // Seed default admin user — email comes from env var ADMIN_EMAIL
   const defaultHash = hashPassword('admin123');
@@ -442,6 +479,103 @@ app.post('/api/logout', requireAuth, (req, res) => {
 
 app.get('/api/me', requireAuth, (req, res) => {
   res.json({ username: req.user.username, role: req.user.role });
+});
+
+// ── ADMIN CHARGER ONBOARDING ──────────────────────────────────────────────────
+app.post('/api/chargers/register', requireAuth, async (req, res) => {
+  // Require admin role
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Admin role required' });
+  }
+
+  const {
+    charger_id,
+    charger_type,
+    vendor,
+    model,
+    location_name,
+    address,
+    latitude,
+    longitude,
+    connectors
+  } = req.body;
+
+  // Validate required fields
+  if (!charger_id || !charger_type || !Array.isArray(connectors) || connectors.length === 0) {
+    return res.status(400).json({
+      error: 'Missing required fields: charger_id, charger_type, connectors (non-empty array)'
+    });
+  }
+
+  // Validate connector array format
+  for (const c of connectors) {
+    if (!Number.isInteger(c.connector_id) || c.connector_id < 0) {
+      return res.status(400).json({ error: 'Invalid connector_id in connectors array' });
+    }
+  }
+
+  try {
+    // Check if charger already exists
+    const existing = await query(`SELECT id FROM chargers WHERE id = $1`, [charger_id]);
+    if (existing.length > 0) {
+      return res.status(409).json({ error: 'Charger ID already exists' });
+    }
+
+    // Generate auth_key (UUID v4)
+    const authKey = crypto.randomUUID();
+
+    // Insert charger record
+    await run(
+      `INSERT INTO chargers (
+        id, charger_type, vendor, model, location_name, address,
+        latitude, longitude, auth_key, provisioning_status, status
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'Provisioning', 'Unavailable')`,
+      [
+        charger_id,
+        charger_type,
+        vendor || null,
+        model || null,
+        location_name || null,
+        address || null,
+        latitude || null,
+        longitude || null,
+        authKey
+      ]
+    );
+
+    // Insert connector records
+    const connectorResponses = [];
+    for (const c of connectors) {
+      await run(
+        `INSERT INTO connectors (
+          charger_id, connector_id, connector_type, voltage, amperage, power_rating_kw, status
+        ) VALUES ($1, $2, $3, $4, $5, $6, 'Available')`,
+        [
+          charger_id,
+          c.connector_id,
+          c.connector_type || 'AC',
+          c.voltage || 230,
+          c.amperage || 32,
+          c.power_rating_kw || 7.4
+        ]
+      );
+      connectorResponses.push({
+        connector_id: c.connector_id,
+        power_rating_kw: c.power_rating_kw || 7.4
+      });
+    }
+
+    res.json({
+      ok: true,
+      charger_id,
+      auth_key: authKey,
+      connectors: connectorResponses,
+      next_steps: `Configure your charger to connect to wss://voltgrid-api-q2sf.onrender.com/ocpp/${charger_id}`
+    });
+  } catch (err) {
+    console.error('[API] Charger registration error:', err.message);
+    res.status(500).json({ error: 'Failed to register charger' });
+  }
 });
 
 // ── PROTECTED REST API ────────────────────────────────────────────────────────
